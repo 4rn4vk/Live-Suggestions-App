@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* Enable class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Thin, theme-harmonious scrollbars */
+* {
+  scrollbar-width: thin;
+}
+
+.dark * {
+  scrollbar-color: rgb(75 85 99 / 0.5) transparent;
+}
+
+html:not(.dark) * {
+  scrollbar-color: rgb(156 163 175 / 0.45) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background-color: rgb(75 85 99 / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128 / 0.75);
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175 / 0.5);
+}
+
+html:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(107 114 128 / 0.7);
+}
