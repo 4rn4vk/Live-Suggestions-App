@@ -428,7 +428,7 @@ export default function Home() {
       )}
 
       {/* ── Three-column layout ─────────────────────────────────────────────── */}
-      <main className="flex flex-1 overflow-hidden divide-x divide-gray-200 dark:divide-gray-800">
+      <main className="flex flex-1 overflow-x-auto overflow-y-hidden divide-x divide-gray-200 dark:divide-gray-800">
         {/* Transcript */}
         <section className="flex flex-col w-[28%] min-w-60 px-5 py-5 overflow-hidden">
           <TranscriptPanel
