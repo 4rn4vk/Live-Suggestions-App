@@ -8,6 +8,8 @@ import { useSettings } from "@/context/SettingsContext";
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** When true the modal cannot be closed until a Groq API key is saved */
+  required?: boolean;
 }
 
 const FIELD_LABELS: Array<{
@@ -27,7 +29,7 @@ const FIELD_LABELS: Array<{
   { key: "chatSystemPrompt", label: "Chat System Prompt", type: "textarea", rows: 8 },
 ];
 
-export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
+export default function SettingsModal({ isOpen, onClose, required }: SettingsModalProps) {
   const { settings, updateSettings, resetToDefaults } = useSettings();
   const [draft, setDraft] = useState<AppSettings>(settings);
 
@@ -38,7 +40,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   if (!isOpen) return null;
 
+  const hasKey = draft.groqApiKey.trim().length > 0;
+
   function handleSave() {
+    if (required && !hasKey) return;
     updateSettings(draft);
     onClose();
   }
@@ -55,14 +60,23 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       <div className="relative flex flex-col w-full max-w-2xl max-h-[90vh] bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Settings</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-xl leading-none"
-            aria-label="Close settings"
-          >
-            ✕
-          </button>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Settings</h2>
+            {required && (
+              <p className="text-xs text-indigo-500 dark:text-indigo-400 mt-0.5">
+                Enter your Groq API key to get started
+              </p>
+            )}
+          </div>
+          {!required && (
+            <button
+              onClick={onClose}
+              className="text-gray-400 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors text-xl leading-none"
+              aria-label="Close settings"
+            >
+              ✕
+            </button>
+          )}
         </div>
 
         {/* Body */}
@@ -106,15 +120,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             Reset to defaults
           </button>
           <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            >
-              Cancel
-            </button>
+            {!required && (
+              <button
+                onClick={onClose}
+                className="px-4 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+            )}
             <button
               onClick={handleSave}
-              className="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors"
+              disabled={!hasKey}
+              className="px-4 py-2 text-sm rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Save
             </button>

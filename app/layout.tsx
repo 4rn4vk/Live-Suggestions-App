@@ -10,15 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
-      <head>
-        {/* Prevent flash: read theme from localStorage before first paint */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('ls_theme');if(t==='light'){document.documentElement.classList.remove('dark')}else{document.documentElement.classList.add('dark')}}catch(e){}})()`,
-          }}
-        />
-      </head>
-      <body className="antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-white h-screen overflow-hidden">
+      <body className="antialiased bg-white dark:bg-gray-950 text-gray-900 dark:text-white">
         <SettingsProvider>{children}</SettingsProvider>
       </body>
     </html>

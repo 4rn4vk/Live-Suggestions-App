@@ -24,7 +24,9 @@ function uid() {
 
 export default function Home() {
   const { settings } = useSettings();
-  const [settingsOpen, setSettingsOpen] = useState(!settings.groqApiKey);
+  // Start closed so server and client initial render match (avoids hydration mismatch).
+  // After mount, open if no API key is stored.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -32,6 +34,15 @@ export default function Home() {
   useEffect(() => {
     const saved = localStorage.getItem("ls_theme");
     if (saved === "light") setIsDark(false);
+
+    // Open settings modal on first visit (no stored key)
+    try {
+      const stored = localStorage.getItem("live_suggestions_settings");
+      const parsed = stored ? (JSON.parse(stored) as { groqApiKey?: string }) : null;
+      if (!parsed?.groqApiKey) setSettingsOpen(true);
+    } catch {
+      setSettingsOpen(true);
+    }
   }, []);
   useEffect(() => {
     if (isDark) {
@@ -359,15 +370,15 @@ export default function Home() {
   const missingKey = !settings.groqApiKey;
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex flex-col min-h-screen md:h-screen md:overflow-hidden">
       {/* ── Error toast ──────────────────────────────────────────────────────── */}
       <Toast message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
+      <header className="flex items-center justify-between px-4 md:px-6 py-3 border-b border-gray-200 dark:border-gray-800 shrink-0">
         <div className="flex items-center gap-2">
           <span className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
           <span className="font-bold text-sm tracking-tight">Live Suggestions</span>
-          <span className="text-gray-400 dark:text-gray-500 text-xs">AI Meeting Copilot</span>
+          <span className="hidden sm:inline text-gray-400 dark:text-gray-500 text-xs">AI Meeting Copilot</span>
         </div>
         <div className="flex items-center gap-2">
           <ExportButton getExportData={getExportData} />
@@ -428,9 +439,9 @@ export default function Home() {
       )}
 
       {/* ── Three-column layout ─────────────────────────────────────────────── */}
-      <main className="flex flex-1 overflow-x-auto overflow-y-hidden divide-x divide-gray-200 dark:divide-gray-800">
+      <main className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-y-hidden md:overflow-x-auto divide-y md:divide-y-0 md:divide-x divide-gray-200 dark:divide-gray-800">
         {/* Transcript */}
-        <section className="flex flex-col w-[28%] min-w-60 px-5 py-5 overflow-hidden">
+        <section className="flex flex-col w-full md:w-[28%] md:min-w-60 px-4 md:px-5 py-4 md:py-5 min-h-90 md:min-h-0 overflow-hidden">
           <TranscriptPanel
             chunks={transcriptChunks}
             isRecording={recorderState === "recording"}
@@ -441,7 +452,7 @@ export default function Home() {
         </section>
 
         {/* Live Suggestions */}
-        <section className="flex flex-col w-[34%] min-w-70 px-5 py-5 overflow-hidden">
+        <section className="flex flex-col w-full md:w-[34%] md:min-w-70 px-4 md:px-5 py-4 md:py-5 min-h-100 md:min-h-0 overflow-hidden">
           <SuggestionsPanel
             batches={suggestionBatches}
             isLoading={isFetchingSuggestions}
@@ -453,7 +464,7 @@ export default function Home() {
         </section>
 
         {/* Chat */}
-        <section className="flex flex-col flex-1 min-w-70 px-5 py-5 overflow-hidden">
+        <section className="flex flex-col flex-1 w-full md:min-w-70 px-4 md:px-5 py-4 md:py-5 min-h-100 md:min-h-0 overflow-hidden">
           <ChatPanel
             messages={chatMessages}
             isStreaming={isStreaming}
@@ -462,7 +473,7 @@ export default function Home() {
         </section>
       </main>
 
-      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} required={missingKey} />
     </div>
   );
 }
