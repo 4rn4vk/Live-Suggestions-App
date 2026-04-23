@@ -106,12 +106,20 @@ export default function Home() {
   // Set to true after a manual flush; cleared once transcription completes
   const pendingRefreshRef = useRef(false);
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Timestamp (ms) until which suggestions fetches are suppressed after a 429
+  const rateLimitBackoffUntilRef = useRef<number>(0);
 
   const fetchSuggestions = useCallback(async () => {
     if (!settings.groqApiKey || transcriptChunks.length === 0) return;
     if (isFetchingSuggestions) return;
+    // Skip silently while rate-limit backoff is active
+    if (Date.now() < rateLimitBackoffUntilRef.current) return;
 
     const recentText = getRecentTranscript(transcriptChunks, settings.suggestionContextChars);
+    // Don't call the API if there's no substantive transcript content — an
+    // empty string in the {transcript} slot causes Groq's json_object mode
+    // to fail with a 400 json_validate_fail error.
+    if (recentText.trim().length < 20) return;
     const prompt = settings.suggestionsPrompt.replace("{transcript}", recentText);
 
     setIsFetchingSuggestions(true);
@@ -127,6 +135,14 @@ export default function Home() {
       });
       if (!res.ok) {
         const text = await res.text();
+        if (res.status === 429) {
+          // Parse Groq's "Please try again in Xs" if present, otherwise default to 60s
+          const match = text.match(/try again in (\d+(?:\.\d+)?)s/i);
+          const retryMs = match ? Math.ceil(parseFloat(match[1])) * 1000 : 60_000;
+          rateLimitBackoffUntilRef.current = Date.now() + retryMs;
+          setErrorMessage(`Rate limit reached — suggestions paused for ${Math.ceil(retryMs / 1000)}s`);
+          return;
+        }
         throw new Error(text.slice(0, 200) || `Suggestions failed (${res.status})`);
       }
       const json = await res.json();

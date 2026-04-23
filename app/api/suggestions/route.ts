@@ -32,7 +32,6 @@ export async function POST(req: NextRequest) {
       ],
       temperature: 0.7,
       max_tokens: 1024,
-      response_format: { type: "json_object" },
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";
@@ -66,6 +65,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ suggestions });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Suggestions failed";
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Forward 429 so the client can apply backoff instead of showing a hard error
+    const status = message.startsWith("429") ? 429 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

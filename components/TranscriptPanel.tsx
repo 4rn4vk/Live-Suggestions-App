@@ -76,17 +76,19 @@ export default function TranscriptPanel({
             </div>
           ))
         )}
-
-        {/* Recording in-progress pulse indicator */}
-        {isRecording && (
-          <div className="flex items-center gap-2 text-xs text-red-400 mt-2">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-            Recording…
-          </div>
-        )}
-
         <div ref={bottomRef} />
       </div>
+
+      {/* Recording in-progress pulse indicator — outside scroll area to avoid overflow clipping */}
+      {isRecording && (
+        <div className="flex items-center gap-2 text-xs text-red-400 mt-2">
+          <span className="relative flex w-2 h-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+            <span className="relative inline-flex rounded-full w-2 h-2 bg-red-500" />
+          </span>
+          Recording…
+        </div>
+      )}
     </div>
   );
 }
