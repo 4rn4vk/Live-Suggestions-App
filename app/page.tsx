@@ -107,6 +107,7 @@ export default function Home() {
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Timestamp (ms) until which suggestions fetches are suppressed after a 429
   const rateLimitBackoffUntilRef = useRef<number>(0);
+  const [rateLimitBackoffUntil, setRateLimitBackoffUntil] = useState(0);
 
   const fetchSuggestions = useCallback(async () => {
     if (!settings.groqApiKey || transcriptChunks.length === 0) return;
@@ -138,6 +139,7 @@ export default function Home() {
           const match = text.match(/try again in (\d+(?:\.\d+)?)s/i);
           const retryMs = match ? Math.ceil(parseFloat(match[1])) * 1000 : 60_000;
           rateLimitBackoffUntilRef.current = Date.now() + retryMs;
+          setRateLimitBackoffUntil(Date.now() + retryMs);
           setErrorMessage(`Rate limit reached — suggestions paused for ${Math.ceil(retryMs / 1000)}s`);
           return;
         }
@@ -152,7 +154,13 @@ export default function Home() {
           suggestions: json.suggestions,
           transcriptSnapshot: recentText,
         };
-        setSuggestionBatches((prev) => [batch, ...prev]);
+        setSuggestionBatches((prev) => {
+          const latest = prev[0];
+          if (latest && batch.suggestions.every((s, i) => s.preview === latest.suggestions[i]?.preview)) {
+            return prev;
+          }
+          return [batch, ...prev];
+        });
       }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : "Failed to get suggestions");
@@ -470,6 +478,7 @@ export default function Home() {
             isLoading={isFetchingSuggestions}
             isRecording={recorderState === "recording"}
             refreshIntervalSec={settings.refreshIntervalSec ?? 30}
+            rateLimitBackoffUntil={rateLimitBackoffUntil}
             onRefresh={handleRefresh}
             onSuggestionClick={handleSuggestionClick}
           />

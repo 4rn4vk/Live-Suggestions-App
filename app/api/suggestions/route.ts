@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
         ? (item.kind as SuggestionKind)
         : "clarification",
       preview: item.preview ?? "",
-      detail: "",
     }));
 
     return NextResponse.json({ suggestions });

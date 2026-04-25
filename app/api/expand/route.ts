@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
       model,
       stream: true,
       temperature: 0.5,
-      max_tokens: 768,
+      max_tokens: 2048,
       messages: [{ role: "user", content: prompt }],
     });
 

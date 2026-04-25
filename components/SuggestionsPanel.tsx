@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from "react";
 import type { SuggestionBatch, Suggestion, SuggestionKind } from "@/types";
+import { formatTime } from "@/lib/utils";
 
 interface SuggestionsPanelProps {
   batches: SuggestionBatch[];
   isLoading: boolean;
   isRecording: boolean;
   refreshIntervalSec: number;
+  rateLimitBackoffUntil?: number;
   onRefresh: () => void;
   onSuggestionClick: (suggestion: Suggestion) => void;
 }
@@ -19,10 +21,6 @@ const KIND_META: Record<SuggestionKind, { label: string; color: string; icon: st
   fact_check:    { label: "Fact Check",       color: "bg-yellow-50 dark:bg-yellow-900/60 border-yellow-200 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300", icon: "!" },
   clarification: { label: "Clarification",   color: "bg-gray-100 dark:bg-gray-800/80 border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300",        icon: "ⓘ" },
 };
-
-function formatTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
 
 function SuggestionCard({
   suggestion,
@@ -53,6 +51,7 @@ export default function SuggestionsPanel({
   isLoading,
   isRecording,
   refreshIntervalSec,
+  rateLimitBackoffUntil = 0,
   onRefresh,
   onSuggestionClick,
 }: SuggestionsPanelProps) {
@@ -86,9 +85,15 @@ export default function SuggestionsPanel({
         </h2>
         <div className="flex items-center gap-2">
           {isRecording && !isLoading && (
-            <span className="text-[11px] font-mono tabular-nums text-gray-400 dark:text-gray-500">
-              auto refreshing in {countdown}s
-            </span>
+            rateLimitBackoffUntil > Date.now() ? (
+              <span className="text-[11px] font-mono tabular-nums text-amber-500 dark:text-amber-400">
+                rate limited — {Math.ceil((rateLimitBackoffUntil - Date.now()) / 1000)}s
+              </span>
+            ) : (
+              <span className="text-[11px] font-mono tabular-nums text-gray-400 dark:text-gray-500">
+                auto refresh in {countdown}s
+              </span>
+            )
           )}
           <button
             onClick={onRefresh}

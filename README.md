@@ -28,7 +28,7 @@ npm run dev
 # → http://localhost:3000
 ```
 
-No `.env` needed — the Groq API key is entered through the in-app Settings modal and stored in `localStorage`. Nothing is ever persisted server-side.
+No `.env` needed — the Groq API key is entered through the in-app Settings modal, stored in `sessionStorage` (cleared when the tab closes), and synced to an HTTP-only session cookie via `/api/set-key` so API routes read the key from the cookie and it never travels in a request body.
 
 ## How it works
 
@@ -84,7 +84,7 @@ User types message → /api/chat  → streaming LLM reply      → Chat panel
 
 | Decision | Rationale |
 |---|---|
-| Client-side API key via `localStorage` | Zero backend infra, zero key leakage risk server-side. Assignment-appropriate. |
+| API key in HTTP-only session cookie | Stored in `sessionStorage` client-side, synced to an HTTP-only cookie via `/api/set-key`; request bodies never carry the key. |
 | Audio chunked with `requestData()` every 30 s | Avoids holding a full session blob in memory; matches the transcript cadence |
 | Suggestions auto-fire on the same interval as audio chunks | Everything stays in lockstep — refresh = new transcript + new suggestions |
 | No vector DB / embedding search | Transcript fits comfortably in a single LLM context window for session lengths realistic for interviews |
@@ -102,7 +102,8 @@ User types message → /api/chat  → streaming LLM reply      → Chat panel
 │       ├── transcribe/route.ts  Whisper Large V3
 │       ├── suggestions/route.ts 3 suggestions (JSON)
 │       ├── expand/route.ts      Expanded answer (stream)
-│       └── chat/route.ts        Chat (stream)
+│       ├── chat/route.ts        Chat (stream)
+│       └── set-key/route.ts     API key → HTTP-only session cookie
 ├── components/
 │   ├── TranscriptPanel.tsx     Left column
 │   ├── SuggestionsPanel.tsx    Middle column
@@ -110,7 +111,7 @@ User types message → /api/chat  → streaming LLM reply      → Chat panel
 │   ├── SettingsModal.tsx       API key + all editable prompts
 │   └── ExportButton.tsx        JSON session export
 ├── context/
-│   └── SettingsContext.tsx     Global settings state (localStorage-backed)
+│   └── SettingsContext.tsx     Global settings state (sessionStorage-backed + HTTP-only cookie)
 ├── hooks/
 │   └── useAudioRecorder.ts     MediaRecorder + chunk scheduling
 ├── lib/

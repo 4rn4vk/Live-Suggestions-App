@@ -15,7 +15,6 @@ export interface Suggestion {
   id: string;
   kind: SuggestionKind;
   preview: string;   // short, self-contained value (1–2 sentences)
-  detail: string;    // populated on click
 }
 
 export interface SuggestionBatch {

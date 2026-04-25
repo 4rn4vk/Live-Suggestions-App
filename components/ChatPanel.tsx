@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import type { ChatMessage } from "@/types";
+import { formatTime } from "@/lib/utils";
 
 interface ChatPanelProps {
   messages: ChatMessage[];
@@ -9,57 +10,197 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
 }
 
-function formatTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-// Inline bold: replace **text** with <strong>text</strong>
+// Inline: **bold**, *italic*, `code`
 function renderInline(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((part, i) =>
-    part.startsWith("**") && part.endsWith("**") ? (
-      <strong key={i}>{part.slice(2, -2)}</strong>
-    ) : (
-      part
-    )
-  );
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  const parts = text.split(pattern);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**"))
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    if (part.startsWith("*") && part.endsWith("*"))
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    if (part.startsWith("`") && part.endsWith("`"))
+      return <code key={i} className="bg-gray-200 dark:bg-gray-700 rounded px-1 py-0.5 text-[11px] font-mono">{part.slice(1, -1)}</code>;
+    return part;
+  });
 }
 
-// Markdown-ish rendering: headers, bullets, bold, line breaks
-function renderContent(text: string) {
-  return text.split("\n").map((line, i) => {
-    const trimmed = line.trim();
-    // ### / ## / # headings
+type Block =
+  | { type: "heading"; level: number; text: string }
+  | { type: "bullet"; items: string[] }
+  | { type: "ordered"; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] }
+  | { type: "code"; lang: string; lines: string[] }
+  | { type: "hr" }
+  | { type: "paragraph"; text: string }
+  | { type: "blank" };
+
+function parseBlocks(text: string): Block[] {
+  const lines = text.split("\n");
+  const blocks: Block[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+
+    // Fenced code block
+    if (trimmed.startsWith("```")) {
+      const lang = trimmed.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      blocks.push({ type: "code", lang, lines: codeLines });
+      i++;
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(trimmed)) {
+      blocks.push({ type: "hr" });
+      i++;
+      continue;
+    }
+
+    // Heading
     const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)$/);
     if (headingMatch) {
-      return (
-        <p key={i} className="font-semibold text-gray-900 dark:text-gray-100 mt-2">
-          {renderInline(headingMatch[2])}
-        </p>
-      );
+      blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2] });
+      i++;
+      continue;
     }
+
+    // Table — look-ahead: current line starts with |, next non-empty starts with |---|
+    if (trimmed.startsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      const parseCells = (line: string) =>
+        line.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const [headerRow, , ...dataRows] = tableLines; // skip separator row
+      if (headerRow) {
+        blocks.push({
+          type: "table",
+          headers: parseCells(headerRow),
+          rows: dataRows.filter((r) => !/^[\s|:-]+$/.test(r)).map(parseCells),
+        });
+      }
+      continue;
+    }
+
+    // Bullet list — collect consecutive bullet lines
     if (trimmed.startsWith("- ") || trimmed.startsWith("• ") || trimmed.startsWith("* ")) {
-      return (
-        <li key={i} className="ml-4 list-disc">
-          {renderInline(trimmed.slice(2))}
-        </li>
-      );
+      const items: string[] = [];
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        if (t.startsWith("- ") || t.startsWith("• ") || t.startsWith("* ")) {
+          items.push(t.slice(2));
+          i++;
+        } else break;
+      }
+      blocks.push({ type: "bullet", items });
+      continue;
     }
-    // Numbered list: "1. item"
+
+    // Ordered list
     if (/^\d+\.\s/.test(trimmed)) {
-      return (
-        <li key={i} className="ml-4 list-decimal">
-          {renderInline(trimmed.replace(/^\d+\.\s/, ""))}
-        </li>
-      );
+      const items: string[] = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+        items.push(lines[i].trim().replace(/^\d+\.\s/, ""));
+        i++;
+      }
+      blocks.push({ type: "ordered", items });
+      continue;
     }
-    return trimmed ? (
-      <p key={i} className="mt-1">
-        {renderInline(line)}
-      </p>
-    ) : (
-      <br key={i} />
-    );
+
+    if (!trimmed) {
+      blocks.push({ type: "blank" });
+    } else {
+      blocks.push({ type: "paragraph", text: raw });
+    }
+    i++;
+  }
+  return blocks;
+}
+
+function renderContent(text: string) {
+  const blocks = parseBlocks(text);
+  return blocks.map((block, i) => {
+    switch (block.type) {
+      case "heading": {
+        const cls = block.level === 1
+          ? "text-base font-bold text-gray-900 dark:text-gray-100 mt-3 mb-1"
+          : block.level === 2
+          ? "text-sm font-bold text-gray-900 dark:text-gray-100 mt-2 mb-0.5"
+          : "text-sm font-semibold text-gray-800 dark:text-gray-200 mt-2";
+        return <p key={i} className={cls}>{renderInline(block.text)}</p>;
+      }
+      case "bullet":
+        return (
+          <ul key={i} className="list-disc ml-4 space-y-0.5 my-1">
+            {block.items.map((item, j) => (
+              <li key={j} className="text-sm">{renderInline(item)}</li>
+            ))}
+          </ul>
+        );
+      case "ordered":
+        return (
+          <ol key={i} className="list-decimal ml-4 space-y-0.5 my-1">
+            {block.items.map((item, j) => (
+              <li key={j} className="text-sm">{renderInline(item)}</li>
+            ))}
+          </ol>
+        );
+      case "table":
+        return (
+          <div key={i} className="overflow-x-auto my-2">
+            <table className="min-w-full text-xs border-collapse">
+              <thead>
+                <tr>
+                  {block.headers.map((h, j) => (
+                    <th key={j} className="border border-gray-300 dark:border-gray-600 bg-gray-200 dark:bg-gray-700 px-2 py-1 text-left font-semibold whitespace-nowrap">
+                      {renderInline(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {block.rows.map((row, j) => (
+                  <tr key={j} className={j % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50 dark:bg-gray-800"}>
+                    {row.map((cell, k) => (
+                      <td key={k} className="border border-gray-300 dark:border-gray-600 px-2 py-1">
+                        {renderInline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      case "code":
+        return (
+          <pre key={i} className="bg-gray-200 dark:bg-gray-700 rounded-lg px-3 py-2 my-1.5 overflow-x-auto text-[11px] font-mono leading-relaxed">
+            <code>{block.lines.join("\n")}</code>
+          </pre>
+        );
+      case "hr":
+        return <hr key={i} className="border-gray-300 dark:border-gray-600 my-2" />;
+      case "blank":
+        return <div key={i} className="h-1" />;
+      case "paragraph":
+      default:
+        return (
+          <p key={i} className="text-sm leading-relaxed">
+            {renderInline((block as { type: "paragraph"; text: string }).text)}
+          </p>
+        );
+    }
   });
 }
 
@@ -69,10 +210,18 @@ export default function ChatPanel({
   onSendMessage,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    if (isStreaming) {
+      // Instant scroll during token streaming so the view always tracks the bottom
+      el.scrollTop = el.scrollHeight;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages, isStreaming]);
 
   function handleSubmit(e: React.FormEvent) {
@@ -91,7 +240,7 @@ export default function ChatPanel({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1 mb-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto space-y-4 pr-1 mb-3">
         {messages.length === 0 && (
           <p className="text-gray-400 dark:text-gray-600 text-sm mt-8 text-center">
             Click a suggestion or type a question to start chatting.
@@ -122,7 +271,8 @@ export default function ChatPanel({
           </div>
         ))}
 
-        {isStreaming && (
+        {/* Dots only while waiting for the first token — once content starts streaming they disappear */}
+        {isStreaming && messages[messages.length - 1]?.content === "" && (
           <div className="flex items-start">
             <div className="bg-gray-100 dark:bg-gray-800 rounded-xl px-4 py-2.5">
               <span className="flex gap-1">

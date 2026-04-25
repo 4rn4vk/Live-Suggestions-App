@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import type { TranscriptChunk } from "@/types";
+import { formatTime } from "@/lib/utils";
 
 interface TranscriptPanelProps {
   chunks: TranscriptChunk[];
@@ -9,10 +10,6 @@ interface TranscriptPanelProps {
   isTranscribing: boolean;
   onStart: () => void;
   onStop: () => void;
-}
-
-function formatTime(epochMs: number): string {
-  return new Date(epochMs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
 export default function TranscriptPanel({
@@ -70,7 +67,7 @@ export default function TranscriptPanel({
           chunks.map((chunk) => (
             <div key={chunk.id} className="group">
               <span className="block text-[10px] text-gray-400 dark:text-gray-600 mb-0.5 font-mono">
-                {formatTime(chunk.timestamp)}
+                {formatTime(chunk.timestamp, true)}
               </span>
               <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed">{chunk.text}</p>
             </div>
