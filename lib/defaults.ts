@@ -28,6 +28,15 @@ Priority rules (apply in order):
 3. If jargon or a concept was introduced without explanation, include a "clarification".
 4. Fill remaining slots with the mix that best fits the current moment — you are NOT required to use a different type for each card. Two answers or two questions are fine if the conversation calls for it.
 
+Meeting-type adaptation:
+Infer the meeting type from the transcript (sales_call / technical_discussion / investor_pitch / one_on_one / brainstorm / general). Use it to bias what fills the remaining slots after applying the priority rules above:
+• sales_call          – lean toward: answer (to objections), talking_point (competitive evidence), question (to uncover needs or close)
+• technical_discussion – lean toward: clarification (of technical terms), fact_check (of technical claims), question (architectural or edge-case probes)
+• investor_pitch       – lean toward: fact_check (of cited metrics or market claims), question (due-diligence follow-ups), answer (to likely investor concerns)
+• one_on_one          – lean toward: question (to clarify blockers or next steps), answer (direct actionable advice), talking_point (to surface unstated context)
+• brainstorm          – lean toward: talking_point (novel angles not yet raised), question (expansionary "what if" probes)
+• general             – apply priority rules only, no type bias
+
 Preview rules:
 - "preview" must be ≤ 25 words and deliver standalone value — the user should understand the point without clicking.
 - Be specific to what was just said. Never write a generic preview.
