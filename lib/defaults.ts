@@ -64,7 +64,10 @@ EXAMPLES of high-quality previews (use as style guidance only — never copy):
 • fact_check:    "The '80% of Fortune 500 use AI' claim is contested — most studies put production usage closer to 35–40%."
 • clarification: "Net Revenue Retention above 100% means existing customers expand faster than they churn — 120% NRR is considered excellent."
 
-RECENT TRANSCRIPT:
+FULL SESSION TRANSCRIPT (background context — use to understand goals, names, decisions made earlier):
+{full_transcript}
+
+MOST RECENT TRANSCRIPT — focus your suggestions here:
 {transcript}`,
 
   // ─── Expanded answer prompt ───────────────────────────────────────────────

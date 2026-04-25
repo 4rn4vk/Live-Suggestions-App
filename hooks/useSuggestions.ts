@@ -43,10 +43,14 @@ export function useSuggestions({
 
     const recentText = getRecentTranscript(transcriptChunks, settings.suggestionContextChars);
     if (recentText.trim().length < 20) return;
+    // Full session transcript for background context — capped at 12 000 chars so we
+    // don't blow the context window while still covering a ~45-min meeting.
+    const fullText = getRecentTranscript(transcriptChunks, 12000);
     const previousSuggestions = latestBatchRef.current
       ? latestBatchRef.current.suggestions.map((s) => `• [${s.kind}] ${s.preview}`).join("\n")
       : "None";
     const prompt = settings.suggestionsPrompt
+      .replace("{full_transcript}", fullText)
       .replace("{transcript}", recentText)
       .replace("{previous_suggestions}", previousSuggestions);
 
