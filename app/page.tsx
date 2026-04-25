@@ -1,16 +1,12 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
-import type {
-  TranscriptChunk,
-  SuggestionBatch,
-  Suggestion,
-  ChatMessage,
-  SessionExport,
-} from "@/types";
+import { useState, useCallback, useEffect } from "react";
+import type { SessionExport } from "@/types";
 import { useSettings } from "@/context/SettingsContext";
-import { getRecentTranscript } from "@/lib/defaults";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
+import { useTranscript } from "@/hooks/useTranscript";
+import { useSuggestions } from "@/hooks/useSuggestions";
+import { useChat } from "@/hooks/useChat";
 import TranscriptPanel from "@/components/TranscriptPanel";
 import SuggestionsPanel from "@/components/SuggestionsPanel";
 import ChatPanel from "@/components/ChatPanel";
@@ -18,16 +14,11 @@ import SettingsModal from "@/components/SettingsModal";
 import ExportButton from "@/components/ExportButton";
 import Toast from "@/components/Toast";
 
-function uid() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
 export default function Home() {
   const { settings } = useSettings();
-  // Start closed so server and client initial render match (avoids hydration mismatch).
-  // After mount, open if no API key is stored.
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const onError = useCallback((msg: string) => setErrorMessage(msg), []);
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(true);
@@ -54,327 +45,21 @@ export default function Home() {
     }
   }, [isDark]);
 
-  // ── Transcript ─────────────────────────────────────────────────────────────
-  const [transcriptChunks, setTranscriptChunks] = useState<TranscriptChunk[]>([]);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-
-  const handleAudioChunk = useCallback(
-    async (blob: Blob) => {
-      if (!settings.groqApiKey || blob.size < 15000) return; // skip blobs that are just container overhead
-
-      setIsTranscribing(true);
-      try {
-        const fd = new FormData();
-        fd.append("audio", blob, "audio.webm");
-
-        const res = await fetch("/api/transcribe", { method: "POST", body: fd });
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text.slice(0, 200) || `Transcription failed (${res.status})`);
-        }
-        const json = await res.json();
-        if (json.error) throw new Error(json.error);
-        if (json.text?.trim()) {
-          setTranscriptChunks((prev) => [
-            ...prev,
-            { id: uid(), text: json.text.trim(), timestamp: Date.now() },
-          ]);
-        }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "";
-        // Silently skip Whisper's "too short" rejection — happens on near-empty chunks
-        if (!msg.toLowerCase().includes("too short")) {
-          setErrorMessage(msg || "Transcription failed");
-        }
-      } finally {
-        setIsTranscribing(false);
-      }
-    },
-    [settings.groqApiKey]
-  );
-
+  // ── Audio + transcript ─────────────────────────────────────────────────────
+  const { chunks: transcriptChunks, isTranscribing, handleAudioChunk } = useTranscript({ onError });
   const { state: recorderState, start: startRecording, stop: stopRecording, flushChunk } =
     useAudioRecorder({
       chunkIntervalMs: (settings.refreshIntervalSec ?? 30) * 1000,
       onChunk: handleAudioChunk,
     });
 
-  // ── Live Suggestions ───────────────────────────────────────────────────────
-  const [suggestionBatches, setSuggestionBatches] = useState<SuggestionBatch[]>([]);
-  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
-  // Set to true after a manual flush; cleared once transcription completes
-  const pendingRefreshRef = useRef(false);
-  const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // Timestamp (ms) until which suggestions fetches are suppressed after a 429
-  const rateLimitBackoffUntilRef = useRef<number>(0);
-  const [rateLimitBackoffUntil, setRateLimitBackoffUntil] = useState(0);
-
-  const fetchSuggestions = useCallback(async () => {
-    if (!settings.groqApiKey || transcriptChunks.length === 0) return;
-    if (isFetchingSuggestions) return;
-    // Skip silently while rate-limit backoff is active
-    if (Date.now() < rateLimitBackoffUntilRef.current) return;
-
-    const recentText = getRecentTranscript(transcriptChunks, settings.suggestionContextChars);
-    // Don't call the API if there's no substantive transcript content — an
-    // empty string in the {transcript} slot causes Groq's json_object mode
-    // to fail with a 400 json_validate_fail error.
-    if (recentText.trim().length < 20) return;
-    const prompt = settings.suggestionsPrompt.replace("{transcript}", recentText);
-
-    setIsFetchingSuggestions(true);
-    try {
-      const res = await fetch("/api/suggestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: settings.llmModel,
-          prompt,
-        }),
-      });
-      if (!res.ok) {
-        const text = await res.text();
-        if (res.status === 429) {
-          // Parse Groq's "Please try again in Xs" if present, otherwise default to 60s
-          const match = text.match(/try again in (\d+(?:\.\d+)?)s/i);
-          const retryMs = match ? Math.ceil(parseFloat(match[1])) * 1000 : 60_000;
-          rateLimitBackoffUntilRef.current = Date.now() + retryMs;
-          setRateLimitBackoffUntil(Date.now() + retryMs);
-          setErrorMessage(`Rate limit reached — suggestions paused for ${Math.ceil(retryMs / 1000)}s`);
-          return;
-        }
-        throw new Error(text.slice(0, 200) || `Suggestions failed (${res.status})`);
-      }
-      const json = await res.json();
-      if (json.error) throw new Error(json.error);
-      if (json.suggestions?.length) {
-        const batch: SuggestionBatch = {
-          id: uid(),
-          timestamp: Date.now(),
-          suggestions: json.suggestions,
-          transcriptSnapshot: recentText,
-        };
-        setSuggestionBatches((prev) => {
-          const latest = prev[0];
-          if (latest && batch.suggestions.every((s, i) => s.preview === latest.suggestions[i]?.preview)) {
-            return prev;
-          }
-          return [batch, ...prev];
-        });
-      }
-    } catch (err) {
-      setErrorMessage(err instanceof Error ? err.message : "Failed to get suggestions");
-    } finally {
-      setIsFetchingSuggestions(false);
-    }
-  }, [settings, transcriptChunks, isFetchingSuggestions]);
-
-  // Always-fresh ref so intervals and effects never capture stale closures
-  const fetchSuggestionsRef = useRef(fetchSuggestions);
-  useEffect(() => { fetchSuggestionsRef.current = fetchSuggestions; });
-
-  // Auto-refresh every N seconds while recording
-  useEffect(() => {
-    if (recorderState === "recording") {
-      autoRefreshRef.current = setInterval(
-        () => fetchSuggestionsRef.current(),
-        (settings.refreshIntervalSec ?? 30) * 1000
-      );
-    } else {
-      if (autoRefreshRef.current) {
-        clearInterval(autoRefreshRef.current);
-        autoRefreshRef.current = null;
-      }
-    }
-    return () => {
-      if (autoRefreshRef.current) clearInterval(autoRefreshRef.current);
-    };
-  }, [recorderState, settings.refreshIntervalSec]);
-
-  // Spec: trigger the very first suggestion batch as soon as the first chunk arrives
-  const prevChunkCountRef = useRef(0);
-  useEffect(() => {
-    if (transcriptChunks.length === 1 && prevChunkCountRef.current === 0) {
-      fetchSuggestionsRef.current();
-    }
-    prevChunkCountRef.current = transcriptChunks.length;
-  }, [transcriptChunks.length]);
-
-  // Spec: manual refresh flushes audio first, then fetches suggestions once transcription finishes
-  useEffect(() => {
-    if (!isTranscribing && pendingRefreshRef.current && transcriptChunks.length > 0) {
-      pendingRefreshRef.current = false;
-      fetchSuggestionsRef.current();
-    }
-  }, [isTranscribing, transcriptChunks.length]);
-
-  const handleRefresh = useCallback(() => {
-    if (recorderState === "recording") {
-      // Flush buffered audio → triggers transcription → effect above fires suggestions
-      pendingRefreshRef.current = true;
-      flushChunk();
-    } else {
-      fetchSuggestionsRef.current();
-    }
-  }, [recorderState, flushChunk]);
+  // ── Suggestions ────────────────────────────────────────────────────────────
+  const { batches: suggestionBatches, isLoading: isFetchingSuggestions, rateLimitBackoffUntil, handleRefresh } =
+    useSuggestions({ transcriptChunks, isTranscribing, recorderState, flushChunk, onError });
 
   // ── Chat ───────────────────────────────────────────────────────────────────
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-
-  const appendAssistantToken = useCallback((token: string) => {
-    setChatMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last?.role === "assistant" && last.id === "__streaming__") {
-        return [
-          ...prev.slice(0, -1),
-          { ...last, content: last.content + token },
-        ];
-      }
-      return prev;
-    });
-  }, []);
-
-  const streamChat = useCallback(
-    async (userText: string) => {
-      if (!settings.groqApiKey || isStreaming) return;
-
-      const userMsg: ChatMessage = {
-        id: uid(),
-        role: "user",
-        content: userText,
-        timestamp: Date.now(),
-      };
-
-      const streamingPlaceholder: ChatMessage = {
-        id: "__streaming__",
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-      };
-
-      setChatMessages((prev) => [...prev, userMsg, streamingPlaceholder]);
-      setIsStreaming(true);
-
-      try {
-        const recentTranscript = getRecentTranscript(
-          transcriptChunks,
-          settings.expandedAnswerContextChars
-        );
-
-        // Attach transcript context to the user message sent to the model
-        const contextualUserContent = `[Transcript context]\n${recentTranscript}\n\n[User question]\n${userText}`;
-
-        const history = chatMessages
-          .filter((m) => m.id !== "__streaming__")
-          .map((m) => ({ role: m.role, content: m.content }));
-
-        const res = await fetch("/api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: settings.llmModel,
-            systemPrompt: settings.chatSystemPrompt,
-            messages: [...history, { role: "user", content: contextualUserContent }],
-          }),
-        });
-
-        if (!res.ok || !res.body) throw new Error(`Chat request failed (${res.status})`);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let done = false;
-        while (!done) {
-          const { value, done: d } = await reader.read();
-          done = d;
-          if (value) appendAssistantToken(decoder.decode(value, { stream: !d }));
-        }
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Chat failed");
-        appendAssistantToken("\n\n[Error: could not get a response]");
-      } finally {
-        // Finalise the streaming message (fix its id and timestamp)
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === "__streaming__" ? { ...m, id: uid(), timestamp: Date.now() } : m
-          )
-        );
-        setIsStreaming(false);
-      }
-    },
-    [settings, isStreaming, transcriptChunks, chatMessages, appendAssistantToken]
-  );
-
-  // Clicking a suggestion: get expanded detail then add to chat
-  const handleSuggestionClick = useCallback(
-    async (suggestion: Suggestion) => {
-      if (!settings.groqApiKey) {
-        setSettingsOpen(true);
-        return;
-      }
-
-      const recentTranscript = getRecentTranscript(
-        transcriptChunks,
-        settings.expandedAnswerContextChars
-      );
-
-      const prompt = settings.expandedAnswerPrompt
-        .replace("{kind}", suggestion.kind)
-        .replace("{preview}", suggestion.preview)
-        .replace("{transcript}", recentTranscript);
-
-      // Show the suggestion as the user turn
-      const userMsg: ChatMessage = {
-        id: uid(),
-        role: "user",
-        content: `[${suggestion.kind.replace(/_/g, " ")}] ${suggestion.preview}`,
-        timestamp: Date.now(),
-      };
-
-      const streamingPlaceholder: ChatMessage = {
-        id: "__streaming__",
-        role: "assistant",
-        content: "",
-        timestamp: Date.now(),
-      };
-
-      setChatMessages((prev) => [...prev, userMsg, streamingPlaceholder]);
-      setIsStreaming(true);
-
-      try {
-        const res = await fetch("/api/expand", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: settings.llmModel,
-            prompt,
-          }),
-        });
-
-        if (!res.ok || !res.body) throw new Error(`Expand request failed (${res.status})`);
-
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let done = false;
-        while (!done) {
-          const { value, done: d } = await reader.read();
-          done = d;
-          if (value) appendAssistantToken(decoder.decode(value, { stream: !d }));
-        }
-      } catch (err) {
-        setErrorMessage(err instanceof Error ? err.message : "Could not expand suggestion");
-        appendAssistantToken("\n\n[Error: could not expand suggestion]");
-      } finally {
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === "__streaming__" ? { ...m, id: uid(), timestamp: Date.now() } : m
-          )
-        );
-        setIsStreaming(false);
-      }
-    },
-    [settings, transcriptChunks, appendAssistantToken]
-  );
+  const { messages: chatMessages, isStreaming, sendMessage: streamChat, expandSuggestion: handleSuggestionClick } =
+    useChat({ transcriptChunks, onError, onNeedApiKey: () => setSettingsOpen(true) });
 
   // ── Export ─────────────────────────────────────────────────────────────────
   const getExportData = useCallback(

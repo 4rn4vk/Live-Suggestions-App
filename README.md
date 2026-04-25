@@ -58,9 +58,9 @@ User types message → /api/chat  → streaming LLM reply      → Chat panel
 - `fact_check` — verification or correction of a specific claim  
 - `clarification` — plain-language explanation of a term or concept  
 
-**Why five kinds instead of one?** Real conversations need different help at different moments. If someone just asked a hard question, the most useful thing is an `answer`. If they've been talking without evidence, a `fact_check` is more valuable. The model is instructed to pick the mix that fits the current moment — not always one of each.
+**Priority-routing logic:** The prompt instructs the model to apply rules in order rather than forcing one-of-each. If a direct question appears in the last 2–3 sentences → include an `answer`. If a factual claim was just made → consider `fact_check`. If jargon was introduced without context → use `clarification`. Fill remaining slots with whatever fits — two `answer` cards are valid when the conversation demands it. This makes the mix context-sensitive rather than formulaic.
 
-**Preview quality constraint:** The prompt explicitly requires the `preview` (25-word max) to deliver standalone value without clicking. This ensures cards aren't clickbait.
+**Preview quality constraint:** The prompt requires each `preview` (≤25 words) to deliver standalone value without clicking. Five few-shot examples are provided inline so the model has a concrete style reference for specificity.
 
 **Temperature:** 0.7 — enough creativity to avoid repetitive suggestions, controlled enough to stay grounded.
 
@@ -70,7 +70,12 @@ User types message → /api/chat  → streaming LLM reply      → Chat panel
 
 **Temperature:** 0.5 — more deterministic; the user expects a reliable, grounded answer.
 
-**Prompt:** Passes `kind` + `preview` so the model knows what the user selected and can tailor the depth and format (structured list vs prose).
+**Type-specific response styles:** The prompt branches by `kind` rather than giving the same generic instruction to all five types:
+- `answer` — lead with the direct answer in 1–2 sentences, then elaborate with supporting evidence
+- `question` — explain *why* this is the right question to ask now and how to phrase it naturally
+- `talking_point` — state the point upfront, back with data or reasoning, add a concrete example
+- `fact_check` — verdict first (accurate / partially / inaccurate), cite the transcript claim, provide the correction
+- `clarification` — plain-language definition in one sentence, then analogy tied to the conversation context
 
 ### Chat (`/api/chat`)
 
