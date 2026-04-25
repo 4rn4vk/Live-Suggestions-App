@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import katex from "katex";
 import type { ChatMessage } from "@/types";
 import { formatTime } from "@/lib/utils";
 
@@ -10,9 +11,9 @@ interface ChatPanelProps {
   onSendMessage: (text: string) => void;
 }
 
-// Inline: **bold**, *italic*, `code`
+// Inline: **bold**, *italic*, `code`, $math$, \( math \)
 function renderInline(text: string): React.ReactNode[] {
-  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+  const pattern = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\$[^$\n]+\$|\\\([^)]+\\\))/g;
   const parts = text.split(pattern);
   return parts.map((part, i) => {
     if (part.startsWith("**") && part.endsWith("**"))
@@ -21,6 +22,10 @@ function renderInline(text: string): React.ReactNode[] {
       return <em key={i}>{part.slice(1, -1)}</em>;
     if (part.startsWith("`") && part.endsWith("`"))
       return <code key={i} className="bg-gray-200 dark:bg-gray-700 rounded px-1 py-0.5 text-[11px] font-mono">{part.slice(1, -1)}</code>;
+    if (part.startsWith("$") && part.endsWith("$"))
+      return <span key={i} dangerouslySetInnerHTML={{ __html: katex.renderToString(part.slice(1, -1), { throwOnError: false }) }} />;
+    if (part.startsWith("\\(") && part.endsWith("\\)"))
+      return <span key={i} dangerouslySetInnerHTML={{ __html: katex.renderToString(part.slice(2, -2), { throwOnError: false }) }} />;
     return part;
   });
 }
@@ -31,6 +36,7 @@ type Block =
   | { type: "ordered"; items: string[] }
   | { type: "table"; headers: string[]; rows: string[][] }
   | { type: "code"; lang: string; lines: string[] }
+  | { type: "math"; tex: string }
   | { type: "hr" }
   | { type: "paragraph"; text: string }
   | { type: "blank" };
@@ -43,6 +49,33 @@ function parseBlocks(text: string): Block[] {
   while (i < lines.length) {
     const raw = lines[i];
     const trimmed = raw.trim();
+
+    // Display math \[ ... \]
+    if (trimmed === "\\[" || (trimmed.startsWith("\\[") && !trimmed.endsWith("\\]"))) {
+      const texLines: string[] = [];
+      const afterOpen = trimmed.slice(2).trim();
+      if (afterOpen) texLines.push(afterOpen);
+      i++;
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        if (t === "\\]" || t.endsWith("\\]")) {
+          if (t !== "\\]") texLines.push(t.endsWith("\\]") ? t.slice(0, -2).trim() : t);
+          i++;
+          break;
+        }
+        texLines.push(lines[i]);
+        i++;
+      }
+      blocks.push({ type: "math", tex: texLines.join("\n") });
+      continue;
+    }
+
+    // Single-line \[ ... \]
+    if (trimmed.startsWith("\\[") && trimmed.endsWith("\\]")) {
+      blocks.push({ type: "math", tex: trimmed.slice(2, -2).trim() });
+      i++;
+      continue;
+    }
 
     // Fenced code block
     if (trimmed.startsWith("```")) {
@@ -182,6 +215,16 @@ function renderContent(text: string) {
               </tbody>
             </table>
           </div>
+        );
+      case "math":
+        return (
+          <div
+            key={i}
+            className="overflow-x-auto my-3 text-center"
+            dangerouslySetInnerHTML={{
+              __html: katex.renderToString(block.tex, { displayMode: true, throwOnError: false }),
+            }}
+          />
         );
       case "code":
         return (

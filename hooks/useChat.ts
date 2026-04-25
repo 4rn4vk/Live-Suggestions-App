@@ -6,6 +6,8 @@ import { useSettings } from "@/context/SettingsContext";
 import { getRecentTranscript } from "@/lib/defaults";
 import { uid } from "@/lib/utils";
 
+const STREAMING_ID = "__streaming__";
+
 interface UseChatOptions {
   transcriptChunks: TranscriptChunk[];
   onError: (message: string) => void;
@@ -26,7 +28,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
   const appendToken = useCallback((token: string) => {
     setMessages((prev) => {
       const last = prev[prev.length - 1];
-      if (last?.role === "assistant" && last.id === "__streaming__") {
+      if (last?.role === "assistant" && last.id === STREAMING_ID) {
         return [...prev.slice(0, -1), { ...last, content: last.content + token }];
       }
       return prev;
@@ -36,7 +38,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
   const finalizeStream = useCallback(() => {
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === "__streaming__" ? { ...m, id: uid(), timestamp: Date.now() } : m
+        m.id === STREAMING_ID ? { ...m, id: uid(), timestamp: Date.now() } : m
       )
     );
     setIsStreaming(false);
@@ -53,7 +55,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         timestamp: Date.now(),
       };
       const placeholder: ChatMessage = {
-        id: "__streaming__",
+        id: STREAMING_ID,
         role: "assistant",
         content: "",
         timestamp: Date.now(),
@@ -75,7 +77,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
 
         // Capture history before the placeholder was appended
         const history = messages
-          .filter((m) => m.id !== "__streaming__")
+          .filter((m) => m.id !== STREAMING_ID)
           .map((m) => ({ role: m.role, content: m.content }));
 
         const res = await fetch("/api/chat", {
@@ -133,7 +135,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         timestamp: Date.now(),
       };
       const placeholder: ChatMessage = {
-        id: "__streaming__",
+        id: STREAMING_ID,
         role: "assistant",
         content: "",
         timestamp: Date.now(),
@@ -168,7 +170,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         if (err instanceof Error && err.name === "AbortError") {
           // Clean up the orphaned placeholder and user message
           setMessages((prev) =>
-            prev.filter((m) => m.id !== "__streaming__" && m.id !== userMsg.id)
+            prev.filter((m) => m.id !== STREAMING_ID && m.id !== userMsg.id)
           );
           setIsStreaming(false);
           return;

@@ -99,12 +99,15 @@ export default function SettingsModal({ isOpen, onClose, required }: SettingsMod
                   className="w-full bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   value={String(draft[key])}
                   placeholder={placeholder}
-                  onChange={(e) =>
-                    setDraft((d) => ({
-                      ...d,
-                      [key]: type === "number" ? Number(e.target.value) : e.target.value,
-                    }))
-                  }
+                  onChange={(e) => {
+                    if (type === "number") {
+                      const num = Number(e.target.value);
+                      if (isNaN(num) || num <= 0) return;
+                      setDraft((d) => ({ ...d, [key]: num }));
+                    } else {
+                      setDraft((d) => ({ ...d, [key]: e.target.value }));
+                    }
+                  }}
                 />
               )}
             </div>

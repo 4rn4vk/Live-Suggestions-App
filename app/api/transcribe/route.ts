@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing audio blob" }, { status: 400 });
     }
 
+    if (file.size > 25 * 1024 * 1024) {
+      return NextResponse.json({ error: "Audio file exceeds 25 MB limit" }, { status: 413 });
+    }
+
     const groq = createGroqClient(apiKey);
 
     // Groq SDK expects a File-like object; wrap the Blob with a filename.
