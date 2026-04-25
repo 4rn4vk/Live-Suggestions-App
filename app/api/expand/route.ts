@@ -1,23 +1,31 @@
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { createGroqClient } from "@/lib/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-interface ExpandRequestBody {
-  apiKey: string;
-  model: string;
-  prompt: string; // already substituted
-}
+const ExpandSchema = z.object({
+  model: z.string().min(1).max(100),
+  prompt: z.string().min(1).max(20000),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body: ExpandRequestBody = await req.json();
-    const { apiKey, model, prompt } = body;
-
+    const apiKey = req.cookies.get("groq_api_key")?.value;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Missing API key" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing API key" }), { status: 401 });
     }
+
+    let rawBody: unknown;
+    try { rawBody = await req.json(); } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+    }
+    const parsed = ExpandSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.issues[0].message }), { status: 400 });
+    }
+    const { model, prompt } = parsed.data;
 
     const groq = createGroqClient(apiKey);
 

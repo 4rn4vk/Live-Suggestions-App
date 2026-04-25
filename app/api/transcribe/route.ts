@@ -6,13 +6,14 @@ export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   try {
+    const apiKey = req.cookies.get("groq_api_key")?.value;
+    if (!apiKey) {
+      return NextResponse.json({ error: "Missing API key" }, { status: 401 });
+    }
+
     const formData = await req.formData();
-    const apiKey = formData.get("apiKey");
     const file = formData.get("audio");
 
-    if (!apiKey || typeof apiKey !== "string") {
-      return NextResponse.json({ error: "Missing API key" }, { status: 400 });
-    }
     if (!(file instanceof Blob)) {
       return NextResponse.json({ error: "Missing audio blob" }, { status: 400 });
     }

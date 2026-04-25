@@ -35,9 +35,9 @@ export default function Home() {
     const saved = localStorage.getItem("ls_theme");
     if (saved === "light") setIsDark(false);
 
-    // Open settings modal on first visit (no stored key)
+    // Open settings modal on first visit (no stored key in sessionStorage)
     try {
-      const stored = localStorage.getItem("live_suggestions_settings");
+      const stored = sessionStorage.getItem("live_suggestions_settings");
       const parsed = stored ? (JSON.parse(stored) as { groqApiKey?: string }) : null;
       if (!parsed?.groqApiKey) setSettingsOpen(true);
     } catch {
@@ -65,7 +65,6 @@ export default function Home() {
       setIsTranscribing(true);
       try {
         const fd = new FormData();
-        fd.append("apiKey", settings.groqApiKey);
         fd.append("audio", blob, "audio.webm");
 
         const res = await fetch("/api/transcribe", { method: "POST", body: fd });
@@ -128,7 +127,6 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          apiKey: settings.groqApiKey,
           model: settings.llmModel,
           prompt,
         }),
@@ -267,7 +265,6 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            apiKey: settings.groqApiKey,
             model: settings.llmModel,
             systemPrompt: settings.chatSystemPrompt,
             messages: [...history, { role: "user", content: contextualUserContent }],
@@ -341,7 +338,6 @@ export default function Home() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            apiKey: settings.groqApiKey,
             model: settings.llmModel,
             prompt,
           }),

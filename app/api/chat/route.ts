@@ -1,24 +1,37 @@
 import { NextRequest } from "next/server";
+import { z } from "zod";
 import { createGroqClient } from "@/lib/groq";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-interface ChatRequestBody {
-  apiKey: string;
-  model: string;
-  systemPrompt: string;
-  messages: { role: "user" | "assistant"; content: string }[];
-}
+const MessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string().max(20000),
+});
+
+const ChatSchema = z.object({
+  model: z.string().min(1).max(100),
+  systemPrompt: z.string().max(5000),
+  messages: z.array(MessageSchema).max(100),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body: ChatRequestBody = await req.json();
-    const { apiKey, model, systemPrompt, messages } = body;
-
+    const apiKey = req.cookies.get("groq_api_key")?.value;
     if (!apiKey) {
-      return new Response(JSON.stringify({ error: "Missing API key" }), { status: 400 });
+      return new Response(JSON.stringify({ error: "Missing API key" }), { status: 401 });
     }
+
+    let rawBody: unknown;
+    try { rawBody = await req.json(); } catch {
+      return new Response(JSON.stringify({ error: "Invalid JSON body" }), { status: 400 });
+    }
+    const parsed = ChatSchema.safeParse(rawBody);
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: parsed.error.issues[0].message }), { status: 400 });
+    }
+    const { model, systemPrompt, messages } = parsed.data;
 
     const groq = createGroqClient(apiKey);
 

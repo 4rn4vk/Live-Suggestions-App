@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { createGroqClient } from "@/lib/groq";
 import type { Suggestion, SuggestionKind } from "@/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-interface SuggestionsRequestBody {
-  apiKey: string;
-  model: string;
-  prompt: string; // already has {transcript} substituted by the client
-}
+const SuggestionsSchema = z.object({
+  model: z.string().min(1).max(100),
+  prompt: z.string().min(1).max(20000),
+});
 
 export async function POST(req: NextRequest) {
   try {
-    const body: SuggestionsRequestBody = await req.json();
-    const { apiKey, model, prompt } = body;
+    const apiKey = req.cookies.get("groq_api_key")?.value;
+    if (!apiKey) return NextResponse.json({ error: "Missing API key" }, { status: 401 });
 
-    if (!apiKey) return NextResponse.json({ error: "Missing API key" }, { status: 400 });
-    if (!prompt) return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
+    let rawBody: unknown;
+    try { rawBody = await req.json(); } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
+    const validation = SuggestionsSchema.safeParse(rawBody);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    }
+    const { model, prompt } = validation.data;
 
     const groq = createGroqClient(apiKey);
 
