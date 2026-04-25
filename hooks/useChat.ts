@@ -19,11 +19,15 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const messagesRef = useRef(messages);
 
   // Abort any active stream when the component using this hook unmounts
   useEffect(() => {
     return () => { abortRef.current?.abort(); };
   }, []);
+
+  // Keep messagesRef current so sendMessage never captures a stale snapshot
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   const appendToken = useCallback((token: string) => {
     setMessages((prev) => {
@@ -76,7 +80,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         const contextualContent = `[Transcript context]\n${recentTranscript}\n\n[User question]\n${userText}`;
 
         // Capture history before the placeholder was appended
-        const history = messages
+        const history = messagesRef.current
           .filter((m) => m.id !== STREAMING_ID)
           .map((m) => ({ role: m.role, content: m.content }));
 
@@ -109,7 +113,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         finalizeStream();
       }
     },
-    [settings, isStreaming, transcriptChunks, messages, appendToken, finalizeStream, onError]
+    [settings, isStreaming, transcriptChunks, appendToken, finalizeStream, onError]
   );
 
   const expandSuggestion = useCallback(

@@ -37,6 +37,12 @@ Infer the meeting type from the transcript (sales_call / technical_discussion / 
 • brainstorm          – lean toward: talking_point (novel angles not yet raised), question (expansionary "what if" probes)
 • general             – apply priority rules only, no type bias
 
+Deduplication rule:
+- Do not repeat suggestions from the previous batch. If the transcript changed little, shift focus, change suggestion type, or go deeper on a different angle.
+
+PREVIOUS SUGGESTIONS (do not repeat these):
+{previous_suggestions}
+
 Preview rules:
 - "preview" must be ≤ 25 words and deliver standalone value — the user should understand the point without clicking.
 - Be specific to what was just said. Never write a generic preview.

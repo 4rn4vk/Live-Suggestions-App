@@ -13,6 +13,7 @@ import ChatPanel from "@/components/ChatPanel";
 import SettingsModal from "@/components/SettingsModal";
 import ExportButton from "@/components/ExportButton";
 import Toast from "@/components/Toast";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 export default function Home() {
   const { settings } = useSettings();
@@ -159,24 +160,28 @@ export default function Home() {
 
         {/* Live Suggestions */}
         <section className="flex flex-col w-full md:w-[34%] md:min-w-70 px-4 md:px-5 py-4 md:py-5 min-h-100 md:min-h-0 overflow-hidden">
-          <SuggestionsPanel
-            batches={suggestionBatches}
-            isLoading={isFetchingSuggestions}
-            isRecording={recorderState === "recording"}
-            refreshIntervalSec={settings.refreshIntervalSec ?? 30}
-            rateLimitBackoffUntil={rateLimitBackoffUntil}
-            onRefresh={handleRefresh}
-            onSuggestionClick={handleSuggestionClick}
-          />
+          <ErrorBoundary>
+            <SuggestionsPanel
+              batches={suggestionBatches}
+              isLoading={isFetchingSuggestions}
+              isRecording={recorderState === "recording"}
+              refreshIntervalSec={settings.refreshIntervalSec ?? 30}
+              rateLimitBackoffUntil={rateLimitBackoffUntil}
+              onRefresh={handleRefresh}
+              onSuggestionClick={handleSuggestionClick}
+            />
+          </ErrorBoundary>
         </section>
 
         {/* Chat */}
         <section className="flex flex-col flex-1 w-full md:min-w-70 px-4 md:px-5 py-4 md:py-5 min-h-100 md:min-h-0 overflow-hidden">
-          <ChatPanel
-            messages={chatMessages}
-            isStreaming={isStreaming}
-            onSendMessage={streamChat}
-          />
+          <ErrorBoundary>
+            <ChatPanel
+              messages={chatMessages}
+              isStreaming={isStreaming}
+              onSendMessage={streamChat}
+            />
+          </ErrorBoundary>
         </section>
       </main>
 

@@ -31,6 +31,10 @@ export function useSuggestions({
   const autoRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const rateLimitBackoffUntilRef = useRef<number>(0);
   const abortRef = useRef<AbortController | null>(null);
+  const latestBatchRef = useRef<SuggestionBatch | undefined>(undefined);
+
+  // Keep latestBatchRef fresh so fetchSuggestions never captures a stale batch
+  useEffect(() => { latestBatchRef.current = batches[0]; }, [batches]);
 
   const fetchSuggestions = useCallback(async () => {
     if (!settings.groqApiKey || transcriptChunks.length === 0) return;
@@ -39,7 +43,12 @@ export function useSuggestions({
 
     const recentText = getRecentTranscript(transcriptChunks, settings.suggestionContextChars);
     if (recentText.trim().length < 20) return;
-    const prompt = settings.suggestionsPrompt.replace("{transcript}", recentText);
+    const previousSuggestions = latestBatchRef.current
+      ? latestBatchRef.current.suggestions.map((s) => `• [${s.kind}] ${s.preview}`).join("\n")
+      : "None";
+    const prompt = settings.suggestionsPrompt
+      .replace("{transcript}", recentText)
+      .replace("{previous_suggestions}", previousSuggestions);
 
     abortRef.current?.abort();
     const abortController = new AbortController();

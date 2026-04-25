@@ -69,7 +69,6 @@ export async function POST(req: NextRequest) {
     const message =
       (err as { error?: { message?: string } })?.error?.message ??
       (err instanceof Error ? err.message : "Expand failed");
-    console.error("[/api/expand]", message);
     return new Response(JSON.stringify({ error: message }), { status: 500 });
   }
 }

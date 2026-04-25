@@ -28,21 +28,35 @@ export async function POST(req: NextRequest) {
 
     const groq = createGroqClient(apiKey);
 
-    const completion = await groq.chat.completions.create({
-      model,
-      messages: [
-        {
-          role: "system",
-          content: "You are an AI meeting copilot. Always respond with valid JSON in the exact format requested.",
-        },
-        { role: "user", content: prompt },
-      ],
-      temperature: 0.7,
-      max_tokens: 1024,
-      response_format: { type: "json_object" },
-    });
+    // Groq occasionally fails JSON schema validation on the first attempt (json_validate_fail).
+    // Retry up to 2 times on that specific error before surfacing to the client.
+    let raw = "{}";
+    const MAX_ATTEMPTS = 3;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const completion = await groq.chat.completions.create({
+          model,
+          messages: [
+            {
+              role: "system",
+              content: "You are an AI meeting copilot. Always respond with valid JSON in the exact format requested.",
+            },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.7,
+          max_tokens: 1024,
+          response_format: { type: "json_object" },
+        });
+        raw = completion.choices[0]?.message?.content ?? "{}";
+        break; // success
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : "";
+        const isJsonValidateFail = msg.includes("json_validate_fail") || msg.includes("Failed to validate JSON");
+        if (isJsonValidateFail && attempt < MAX_ATTEMPTS) continue;
+        throw err; // non-retryable error or exhausted retries
+      }
+    }
 
-    const raw = completion.choices[0]?.message?.content ?? "{}";
 
     let parsed: { kind: string; preview: string }[];
     try {
