@@ -34,7 +34,13 @@ export async function POST(req: NextRequest) {
       stream: true,
       temperature: 0.5,
       max_tokens: 2048,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert AI meeting assistant. Provide a detailed, well-structured answer. Follow the response style instructions in the user message exactly.",
+        },
+        { role: "user", content: prompt },
+      ],
     });
 
     const encoder = new TextEncoder();

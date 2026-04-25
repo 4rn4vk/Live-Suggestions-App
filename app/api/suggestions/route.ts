@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       ],
       temperature: 0.7,
       max_tokens: 1024,
+      response_format: { type: "json_object" },
     });
 
     const raw = completion.choices[0]?.message?.content ?? "{}";

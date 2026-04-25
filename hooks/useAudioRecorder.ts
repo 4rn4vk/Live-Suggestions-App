@@ -7,9 +7,10 @@ export type RecorderState = "idle" | "recording" | "processing";
 interface UseAudioRecorderOptions {
   chunkIntervalMs: number; // how often to emit a recorded chunk (e.g. 30_000)
   onChunk: (blob: Blob) => void; // called with each audio chunk
+  onError?: (message: string) => void; // called when mic access is denied or fails
 }
 
-export function useAudioRecorder({ chunkIntervalMs, onChunk }: UseAudioRecorderOptions) {
+export function useAudioRecorder({ chunkIntervalMs, onChunk, onError }: UseAudioRecorderOptions) {
   const [state, setState] = useState<RecorderState>("idle");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -73,7 +74,8 @@ export function useAudioRecorder({ chunkIntervalMs, onChunk }: UseAudioRecorderO
 
       intervalRef.current = setInterval(cycleRecorder, chunkIntervalMs);
     } catch (err) {
-      console.error("Microphone access denied:", err);
+      const msg = err instanceof Error ? err.message : "Microphone access denied";
+      onError?.("Microphone access denied: " + msg + ". Please allow microphone permission and try again.");
       setState("idle");
     }
   }, [state, chunkIntervalMs, spawnRecorder, cycleRecorder]);

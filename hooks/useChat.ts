@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatMessage, Suggestion, TranscriptChunk } from "@/types";
 import { useSettings } from "@/context/SettingsContext";
 import { getRecentTranscript } from "@/lib/defaults";
@@ -17,6 +17,11 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Abort any active stream when the component using this hook unmounts
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   const appendToken = useCallback((token: string) => {
     setMessages((prev) => {
@@ -54,6 +59,10 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         timestamp: Date.now(),
       };
 
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       setMessages((prev) => [...prev, userMsg, placeholder]);
       setIsStreaming(true);
 
@@ -72,6 +81,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             model: settings.llmModel,
             systemPrompt: settings.chatSystemPrompt,
@@ -90,6 +100,7 @@ export function useChat({ transcriptChunks, onError, onNeedApiKey }: UseChatOpti
           if (value) appendToken(decoder.decode(value, { stream: !d }));
         }
       } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
         onError(err instanceof Error ? err.message : "Chat failed");
         appendToken("\n\n[Error: could not get a response]");
       } finally {

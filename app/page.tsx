@@ -51,6 +51,7 @@ export default function Home() {
     useAudioRecorder({
       chunkIntervalMs: (settings.refreshIntervalSec ?? 30) * 1000,
       onChunk: handleAudioChunk,
+      onError,
     });
 
   // ── Suggestions ────────────────────────────────────────────────────────────
